@@ -67,16 +67,11 @@ Wk_lst = []
 for idx, (rotor, acc, ang_vel, ang_acc, R) in enumerate(
         zip(rotor_rads, acc_flus[1:idx_max], ang_vel_flus[1:idx_max], ang_acc_flus[1:idx_max], R_nwu_flus[2:idx_max])):
     W_lst.append(identification.computeD(acc, R, ang_vel, ang_acc))
-    Wk_lst.append(identification.computeDk(rotor))
+    Wk_lst.append(-identification.computeDk(rotor))
     Wm_lst.append(np.array([identification.computeDm(acc, R)]).T)
 
 m = 1.5
 Wt = np.concatenate([np.vstack(Wk_lst), np.vstack(W_lst), m * np.vstack(Wm_lst)], axis=1)
 
-u, s, vh = np.linalg.svd(Wt, full_matrices=True)
+identification.runIdentification(Wt)
 
-Xt_hat_star = vh[:, -1]
-Xt_hat = Xt_hat_star / Xt_hat_star[-1]
-print('Identified prop. coeff.', Xt_hat[:2])
-print('Identified center displacement', Xt_hat[2:5])
-print('Identified Intertia', Xt_hat[5:-1])

@@ -1,0 +1,11 @@
+{
+  "python.linting.enabled": true,
+  "python.linting.pylintPath": "pylint",
+  "python.linting.pylintEnabled": true,
+  "python.formatting.provider": "yapf",
+  "python.formatting.yapfArgs": [
+    "--style",
+    "/home/pepms/robotics/other-tools/linters_pep/setup.cfg"
+  ],
+  "cmake.configureOnOpen": false
+}
