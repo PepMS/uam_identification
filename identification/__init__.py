@@ -5,8 +5,10 @@ import pinocchio
 
 import fbpca
 
+
 def skew(v):
     return np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
+
 
 class multicopterData():
     def __init__(self, file_name, prop_min_speed, prop_max_speed):
@@ -194,8 +196,8 @@ def computeDDm(R, vel, acc):
     ]).T
 
     # Displaced center of gravity generates moment
-    D[3:, :3] = D[3:, :3] - skew(-R.T @ np.array([0,0,-9.81]))
-    
+    D[3:, :3] = D[3:, :3] - skew(-R.T @ np.array([0, 0, -9.81]))
+
     return D, Dm
 
 
@@ -235,7 +237,8 @@ def runIdentification(Wt, automatic_deletion=False):
 
         std_dev = np.array([])
         for idx in range(Cxx.shape[0]):
-            std_dev = np.append(std_dev, 100 * np.sqrt(Cxx[idx, idx]) / np.abs(Xt_hat[idx]))
+            # std_dev = np.append(std_dev, 100 * np.sqrt(Cxx[idx, idx]) / np.abs(Xt_hat[idx]))
+            std_dev = np.append(std_dev, np.sqrt(Cxx[idx, idx]))
 
         printResults(params, Xt_hat, std_dev)
         if automatic_deletion:
@@ -254,7 +257,8 @@ def runIdentification(Wt, automatic_deletion=False):
 def solveTLS(Wt):
     u, s, vh = fbpca.pca(Wt, k=Wt.shape[1], raw=False, n_iter=2, l=None)
     # u, s, vh = np.linalg.svd(Wt, full_matrices=True)
-    Xt_hat_star = vh[:, -1]
+    # Xt_hat_star = vh[:, -1]
+    Xt_hat_star = vh[-1, :]
     Xt_hat = Xt_hat_star / Xt_hat_star[-1]
 
     nt = Wt.shape[1]
@@ -262,7 +266,7 @@ def solveTLS(Wt):
     s_nt = min(s)
     sigma_hat_w = s_nt / np.sqrt(r - nt)
 
-    Wt_bar = Wt - s_nt * np.array([u[:, -1]]).T @ np.array([vh[:, -1]])
+    Wt_bar = Wt - s_nt * np.array([u[:, -1]]).T @ np.array([vh[-1, :]])
     Wt_bar_inv = np.linalg.inv(Wt_bar[:, :-1].T @ Wt_bar[:, :-1])
 
     Cxx = sigma_hat_w**2 * (1 + np.linalg.norm(Xt_hat[:-1])**2) * Wt_bar_inv

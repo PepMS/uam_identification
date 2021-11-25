@@ -39,7 +39,7 @@ Xk = np.array([5.84e-06, 3.504e-7])
 # Mass: 1.5 kg
 
 print('Data loading...')
-file_name = '/home/pepms/robotics/method-test/uam_identification/csvs/3_minutes.csv'
+file_name = '/home/pepms/robotics/methods-test/identification/csvs/3_minutes.csv'
 
 prop_min_speed = 100  # Only valid for this simulation
 prop_max_speed = 1100  # Only valid for this simulation
@@ -122,10 +122,10 @@ print('\nReal parameters...\n')
 dyn_param = r_model.inertias[1].toDynamicParameters()
 
 params = ["cf", "cm", "ms_x", "ms_y", "ms_z", "Ixx", "Iyy", "Izz", "Ixy", "Ixz", "Iyz"]
-values = np.array([5.84e-06, 3.504e-7, dyn_param[1], dyn_param[2], dyn_param[3], dyn_param[4], dyn_param[6], dyn_param[9], dyn_param[5], dyn_param[7],
-    dyn_param[8]
+values = np.array([
+    5.84e-06, 3.504e-7, dyn_param[1], dyn_param[2], dyn_param[3], dyn_param[4], dyn_param[6], dyn_param[9],
+    dyn_param[5], dyn_param[7], dyn_param[8]
 ])
 
 for (param, value) in zip(params, values):
     print(param, ":", value)
-
