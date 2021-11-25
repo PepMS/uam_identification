@@ -23,7 +23,7 @@ W_lst = []
 Wm_lst = []
 Wk_lst = []
 
-for i in range(2000):
+for i in range(5000):
 
     x = r_state.rand()
     x[:3] = np.random.rand(3)

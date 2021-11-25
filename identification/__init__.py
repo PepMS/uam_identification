@@ -3,6 +3,8 @@ from os import error
 import numpy as np
 import pinocchio
 
+import fbpca
+
 
 class multicopterData():
     def __init__(self, file_name, prop_min_speed, prop_max_speed):
@@ -12,7 +14,7 @@ class multicopterData():
         self.prop_min_speed = prop_min_speed
         self.prop_max_speed = prop_max_speed
 
-    def loadNumericalData(self, name_list, name_timestamp):
+    def loadNumericalData(self, name_list, name_timestamp='__time'):
         # Angular acceleration
         values = []
         values_ts = []
@@ -23,8 +25,20 @@ class multicopterData():
                     value = np.array([float(row[name]) for name in name_list if row[name] != ''])
                     if value.size > 0:
                         values.append(value)
-                        values_ts.append(row[name_timestamp])
+                        values_ts.append(float(row[name_timestamp]))
         return values, values_ts
+
+    def loadPlatformState(self):
+        state_names = [
+            '/platform_state/pose/position/x', '/platform_state/pose/position/y', '/platform_state/pose/position/z',
+            '/platform_state/pose/orientation/x', '/platform_state/pose/orientation/y',
+            '/platform_state/pose/orientation/z', '/platform_state/pose/orientation/w',
+            '/platform_state/motion/linear/x', '/platform_state/motion/linear/y', '/platform_state/motion/linear/z',
+            '/platform_state/motion/angular/x', '/platform_state/motion/angular/y', '/platform_state/motion/angular/z'
+        ]
+        states, state_ts = self.loadNumericalData(state_names)
+
+        return states, state_ts
 
     def loadLinearVelocity(self):
         # Angular acceleration
@@ -32,7 +46,7 @@ class multicopterData():
             '/fmu/vehicle_local_position_groundtruth/out/vx', '/fmu/vehicle_local_position_groundtruth/out/vy',
             '/fmu/vehicle_local_position_groundtruth/out/vz'
         ]
-        vels, vel_ts = self.loadNumericalData(rotor_names, '/fmu/vehicle_local_position_groundtruth/out/timestamp')
+        vels, vel_ts = self.loadNumericalData(rotor_names)
 
         return [fromFRDtoFLU(vel) for vel in vels], vel_ts
 
@@ -44,7 +58,7 @@ class multicopterData():
             '/fmu/actuator_outputs/out/output.2',
             '/fmu/actuator_outputs/out/output.3',
         ]
-        rotor_pwms, rotor_ts = self.loadNumericalData(rotor_names, '/fmu/actuator_outputs/out/timestamp')
+        rotor_pwms, rotor_ts = self.loadNumericalData(rotor_names)
 
         return [fromPWMtoRadS(rotor_pwm, self.prop_min_speed, self.prop_max_speed)
                 for rotor_pwm in rotor_pwms], rotor_ts
@@ -55,10 +69,9 @@ class multicopterData():
             '/fmu/sensor_combined/out/accelerometer_m_s2.0', '/fmu/sensor_combined/out/accelerometer_m_s2.1',
             '/fmu/sensor_combined/out/accelerometer_m_s2.2'
         ]
-        acc_frds, acc_ts = self.loadNumericalData(acc_names, '/fmu/sensor_combined/out/timestamp')
+        acc_frds, acc_ts = self.loadNumericalData(acc_names)
 
-        # Gravity removed from IMU's readings!
-        return [fromFRDtoFLU(acc) + np.array([0, 0, -9.81]) for acc in acc_frds], acc_ts
+        return [fromFRDtoFLU(acc) for acc in acc_frds], acc_ts
 
     def loadAngularVelocity(self):
         # Angular velocity
@@ -66,7 +79,7 @@ class multicopterData():
             '/fmu/sensor_combined/out/gyro_rad.0', '/fmu/sensor_combined/out/gyro_rad.1',
             '/fmu/sensor_combined/out/gyro_rad.2'
         ]
-        ang_vel_frds, ang_vel_ts = self.loadNumericalData(ang_vel_names, '/fmu/sensor_combined/out/timestamp')
+        ang_vel_frds, ang_vel_ts = self.loadNumericalData(ang_vel_names)
 
         return [fromFRDtoFLU(ang_vel) for ang_vel in ang_vel_frds], ang_vel_ts
 
@@ -76,8 +89,7 @@ class multicopterData():
             '/fmu/vehicle_angular_acceleration/out/xyz.0', '/fmu/vehicle_angular_acceleration/out/xyz.1',
             '/fmu/vehicle_angular_acceleration/out/xyz.2'
         ]
-        ang_acc_frds, ang_acc_ts = self.loadNumericalData(ang_acc_names,
-                                                          '/fmu/vehicle_angular_acceleration/out/timestamp')
+        ang_acc_frds, ang_acc_ts = self.loadNumericalData(ang_acc_names)
 
         return [fromFRDtoFLU(ang_acc) for ang_acc in ang_acc_frds], ang_acc_ts
 
@@ -87,7 +99,7 @@ class multicopterData():
             '/fmu/vehicle_attitude_groundtruth/out/q.2', '/fmu/vehicle_attitude_groundtruth/out/q.3'
         ]
 
-        quat_ned_frds, quat_ts = self.loadNumericalData(quat_names, '/fmu/vehicle_attitude_groundtruth/out/timestamp')
+        quat_ned_frds, quat_ts = self.loadNumericalData(quat_names)
 
         R_nwu_flus = []
         R_nwu_ned = np.identity(3)
@@ -169,8 +181,9 @@ def computeDm(acc, R):
 def computeDDm(R, vel, acc):
     regressor = pinocchio.bodyRegressor(vel, acc)
 
-    Dm = regressor[:, 0]
-    Dm[:3] -= R.T @ np.array([0, 0, -9.81])
+    Dm = np.zeros(6)
+    Dm[:3] = regressor[:3, 0] - R.T @ np.array([0, 0, -9.81])
+    Dm[3:] = regressor[3:, 0]
 
     D = np.vstack([
         regressor[:, 1], regressor[:, 2], regressor[:, 3], regressor[:, 4], regressor[:, 6], regressor[:, 9],
@@ -198,6 +211,7 @@ def computeDk(rotors):
 
     return np.array([c1, c2]).T
 
+
 def printResults(params, Xt, Sigma):
     if len(params) != Xt.size - 1:
         print("Wrong parameter vector dimension")
@@ -206,10 +220,11 @@ def printResults(params, Xt, Sigma):
     for idx, param in enumerate(params):
         print("Param", param, ":", Xt[idx], ". St. dev.:", Sigma[idx])
 
+
 def runIdentification(Wt, automatic_deletion=False):
     params = ["cf", "cm", "ms_x", "ms_y", "ms_z", "Ixx", "Iyy", "Izz", "Ixy", "Ixz", "Iyz"]
 
-    for i in range(10):
+    for i in range(11):
         Xt_hat, Cxx = solveTLS(Wt)
 
         std_dev = np.array([])
@@ -231,7 +246,8 @@ def runIdentification(Wt, automatic_deletion=False):
 
 
 def solveTLS(Wt):
-    u, s, vh = np.linalg.svd(Wt, full_matrices=True)
+    u, s, vh = fbpca.pca(Wt, k=Wt.shape[1], raw=False, n_iter=2, l=None)
+    # u, s, vh = np.linalg.svd(Wt, full_matrices=True)
     Xt_hat_star = vh[:, -1]
     Xt_hat = Xt_hat_star / Xt_hat_star[-1]
 
@@ -242,7 +258,7 @@ def solveTLS(Wt):
 
     Wt_bar = Wt - s_nt * np.array([u[:, -1]]).T @ np.array([vh[:, -1]])
     Wt_bar_inv = np.linalg.inv(Wt_bar[:, :-1].T @ Wt_bar[:, :-1])
-    
+
     Cxx = sigma_hat_w**2 * (1 + np.linalg.norm(Xt_hat[:-1])**2) * Wt_bar_inv
-    
+
     return Xt_hat, Cxx
