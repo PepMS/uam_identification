@@ -23,7 +23,7 @@ W_lst = []
 Wm_lst = []
 Wk_lst = []
 
-for i in range(5000):
+for i in range(10000):
 
     x = r_state.rand()
     x[:3] = np.random.rand(3)
@@ -58,3 +58,14 @@ m = 1.52
 Wt = np.concatenate([np.vstack(Wk_lst), np.vstack(W_lst), m * np.vstack(Wm_lst)], axis=1)
 
 identification.runIdentification(Wt)
+
+print("Real parameters: ")
+dyn_param = r_model.inertias[1].toDynamicParameters()
+
+params = ["cf", "cm", "ms_x", "ms_y", "ms_z", "Ixx", "Iyy", "Izz", "Ixy", "Ixz", "Iyz"]
+values = np.array([5.84e-06, 3.504e-7, dyn_param[1], dyn_param[2], dyn_param[3], dyn_param[4], dyn_param[6], dyn_param[9], dyn_param[5], dyn_param[7],
+    dyn_param[8]
+])
+
+for (param, value) in zip(params, values):
+    print(param, ":", value)

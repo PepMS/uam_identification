@@ -5,6 +5,8 @@ import pinocchio
 
 import fbpca
 
+def skew(v):
+    return np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
 
 class multicopterData():
     def __init__(self, file_name, prop_min_speed, prop_max_speed):
@@ -183,6 +185,7 @@ def computeDDm(R, vel, acc):
 
     Dm = np.zeros(6)
     Dm[:3] = regressor[:3, 0] - R.T @ np.array([0, 0, -9.81])
+    # Dm[:3] = regressor[:3, 0]
     Dm[3:] = regressor[3:, 0]
 
     D = np.vstack([
@@ -190,6 +193,9 @@ def computeDDm(R, vel, acc):
         regressor[:, 5], regressor[:, 7], regressor[:, 8]
     ]).T
 
+    # Displaced center of gravity generates moment
+    D[3:, :3] = D[3:, :3] - skew(-R.T @ np.array([0,0,-9.81]))
+    
     return D, Dm
 
 

@@ -11,9 +11,6 @@ from eagle_mpc.utils.robots_loader import load
 import identification
 
 
-def skew(v):
-    return np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
-
 robot = load("iris_px4")
 r_model = robot.model
 r_data = robot.data
@@ -68,8 +65,6 @@ print("angular reg: ", reg[3:])
 print("angular tau: ", tau[3:])
 
 Dk = identification.computeDk(n_rotors)
-# D = identification.computeD(a_lin, R, w, a_ang)
-# Dm = identification.computeDm(a_lin, R)
 D, Dm = identification.computeDDm(q.toRotationMatrix(), v_motion, a_motion)
 
 print("\nMass: ")
