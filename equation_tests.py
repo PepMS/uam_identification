@@ -40,10 +40,11 @@ R = q.toRotationMatrix()
 v = x[7:10]
 w = x[10:]
 a_lin = accel[:3]
+a_lin = accel[:3] + identification.skew(w) @ v
 a_ang = accel[3:]
 
 v_motion = pinocchio.Motion(v, w)
-a_motion = pinocchio.Motion(a_lin, a_ang)
+a_motion = pinocchio.Motion(accel[:3], accel[3:])
 
 # Real data
 dyn_param = r_model.inertias[1].toDynamicParameters()
@@ -65,7 +66,9 @@ print("angular reg: ", reg[3:])
 print("angular tau: ", tau[3:])
 
 Dk = identification.computeDk(n_rotors)
-D, Dm = identification.computeDDm(q.toRotationMatrix(), v_motion, a_motion)
+# D, Dm = identification.computeDDm(q.toRotationMatrix(), v_motion, a_motion)
+D = identification.computeD(q.toRotationMatrix(), w, a_lin, a_ang)
+Dm = identification.computeDm(a_lin, R)
 
 print("\nMass: ")
 print("Pinocchio: ", body_reg[:, 0])

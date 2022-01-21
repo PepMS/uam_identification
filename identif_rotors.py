@@ -3,10 +3,9 @@ import pinocchio
 import matplotlib.pyplot as plt
 
 import identification
-
 from eagle_mpc.utils.robots_loader import load
 
-robot = load("iris_px4")
+robot = load("iris")
 r_model = robot.model
 dyn_param = r_model.inertias[1].toDynamicParameters()
 m = dyn_param[0]
@@ -14,7 +13,7 @@ X = np.array([
     dyn_param[1], dyn_param[2], dyn_param[3], dyn_param[4], dyn_param[6], dyn_param[9], dyn_param[5], dyn_param[7],
     dyn_param[8]
 ])
-Xk = np.array([5.84e-06, 3.504e-7])
+Xk = np.array([8.54858e-06, 1.3677728e-7])
 
 # Quadcopter description:
 #        y
@@ -39,17 +38,19 @@ Xk = np.array([5.84e-06, 3.504e-7])
 # Mass: 1.5 kg
 
 print('Data loading...')
-file_name = './csvs/long.csv'
+file_name = './csvs/rotors_planner.csv'
 
-prop_min_speed = 100  # Only valid for this simulation
-prop_max_speed = 1100  # Only valid for this simulation
-
-data = identification.multicopterData(file_name, prop_min_speed, prop_max_speed)
+data = identification.multicopterData(file_name, ros2=False)
 
 rotor_rads, rotor_ts = data.loadRotorAngularVelocity()
 states, state_ts = data.loadPlatformState()
 a_lin_flus, a_lin_ts = data.loadAcceleration()
-a_ang_flus, a_ang_ts = data.loadAngularAcceleration()
+
+a_ang_flus = [np.zeros(3)]
+a_ang_ts = [state_ts[0]]
+for idx, state in enumerate(states[1:]):
+    a_ang_flus.append((state[10:] - states[idx - 1][10:]) / (state_ts[idx] - state_ts[idx - 1]))
+    a_ang_ts.append(state_ts[idx])
 
 print("Length of rotors: ", len(rotor_rads))
 print("Length of state: ", len(states))
@@ -59,7 +60,7 @@ print("Length of angular acceleration: ", len(a_ang_flus))
 print('\nCreating matrices...\n')
 
 idx_min = 0
-idx_max = -1
+idx_max = 10000
 
 W_lst = []
 Wm_lst = []
@@ -79,11 +80,12 @@ for idx, (rotor, state, a_lin, a_ang) in enumerate(
 
     q = pinocchio.Quaternion(state[3:7])
 
-    a = a_lin + q.toRotationMatrix().T @ np.array([0, 0, -9.81])
+    # THIS IS DIFFERENT HERE!
+    a = a_lin - q.toRotationMatrix().T @ np.array([0, 0, -9.81])
     a_lin_nogs.append(a)
 
     v_motion = pinocchio.Motion(state[7:10], state[10:13])
-    a_motion = pinocchio.Motion(a, a_ang)
+    a_motion = pinocchio.Motion(a - identification.skew(state[10:13]) @ state[7:10], a_ang)
 
     D = identification.computeD(q.toRotationMatrix(), state[10:13], a, a_ang)
     Dm = identification.computeDm(q.toRotationMatrix(), a)
@@ -95,21 +97,21 @@ for idx, (rotor, state, a_lin, a_ang) in enumerate(
     Wm_lst.append(Dm)
     Wk_lst.append(Dk)
 
-# plt.figure()
-# plt.plot(rotor_ts[idx_min:idx_max], rotor_rads[idx_min:idx_max])
-# plt.figure()
-# plt.plot(state_ts[idx_min:idx_max], [state[3:7] for state in states[idx_min:idx_max]])
-# plt.figure()
-# plt.plot(state_ts[idx_min:idx_max], [state[7:10] for state in states[idx_min:idx_max]])
-# plt.figure()
-# plt.plot(state_ts[idx_min:idx_max], [state[10:13] for state in states[idx_min:idx_max]])
-# plt.figure()
-# plt.plot(a_lin_ts[idx_min:idx_max], a_lin_nogs)
+plt.figure()
+plt.plot(rotor_ts[idx_min:idx_max], rotor_rads[idx_min:idx_max])
+plt.figure()
+plt.plot(state_ts[idx_min:idx_max], [state[3:7] for state in states[idx_min:idx_max]])
+plt.figure()
+plt.plot(state_ts[idx_min:idx_max], [state[7:10] for state in states[idx_min:idx_max]])
+plt.figure()
+plt.plot(state_ts[idx_min:idx_max], [state[10:13] for state in states[idx_min:idx_max]])
+plt.figure()
+plt.plot(a_lin_ts[idx_min:idx_max], a_lin_nogs)
 # plt.figure()
 # plt.plot(a_ang_ts[idx_min:idx_max], a_ang_flus[idx_min:idx_max])
 
-# plt.figure()
-# plt.plot([np.linalg.norm(error) for error in errors])
+plt.figure()
+plt.plot([np.linalg.norm(error) for error in errors])
 
 plt.show()
 
@@ -124,7 +126,7 @@ dyn_param = r_model.inertias[1].toDynamicParameters()
 
 params = ["cf", "cm", "ms_x", "ms_y", "ms_z", "Ixx", "Iyy", "Izz", "Ixy", "Ixz", "Iyz"]
 values = np.array([
-    5.84e-06, 3.504e-7, dyn_param[1], dyn_param[2], dyn_param[3], dyn_param[4], dyn_param[6], dyn_param[9],
+    Xk[0], Xk[1], dyn_param[1], dyn_param[2], dyn_param[3], dyn_param[4], dyn_param[6], dyn_param[9],
     dyn_param[5], dyn_param[7], dyn_param[8]
 ])
 

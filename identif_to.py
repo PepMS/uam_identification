@@ -47,24 +47,28 @@ for i in range(10000):
     v_motion = pinocchio.Motion(v, w)
     a_motion = pinocchio.Motion(a_lin, a_ang)
 
-    D, Dm = identification.computeDDm(R, v_motion, a_motion)
+    a_lin = a_lin + identification.skew(w) @ v
+    D = identification.computeD(q.toRotationMatrix(), w, a_lin, a_ang)
+    Dm = identification.computeDm(q.toRotationMatrix(), a_lin)
     Dk = identification.computeDk(n_rotors)
 
     W_lst.append(D)
-    Wm_lst.append(np.array([Dm]).T)
-    Wk_lst.append(-Dk)
+    # Wm_lst.append(np.array([Dm]).T)
+    Wm_lst.append(Dm)
+    Wk_lst.append(Dk)
 
 m = 1.52
 Wt = np.concatenate([np.vstack(Wk_lst), np.vstack(W_lst), m * np.vstack(Wm_lst)], axis=1)
 
 identification.runIdentification(Wt)
 
-print("Real parameters: ")
+print("\nReal parameters: ")
 dyn_param = r_model.inertias[1].toDynamicParameters()
 
 params = ["cf", "cm", "ms_x", "ms_y", "ms_z", "Ixx", "Iyy", "Izz", "Ixy", "Ixz", "Iyz"]
-values = np.array([5.84e-06, 3.504e-7, dyn_param[1], dyn_param[2], dyn_param[3], dyn_param[4], dyn_param[6], dyn_param[9], dyn_param[5], dyn_param[7],
-    dyn_param[8]
+values = np.array([
+    5.84e-06, 3.504e-7, dyn_param[1], dyn_param[2], dyn_param[3], dyn_param[4], dyn_param[6], dyn_param[9],
+    dyn_param[5], dyn_param[7], dyn_param[8]
 ])
 
 for (param, value) in zip(params, values):

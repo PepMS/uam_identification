@@ -10,13 +10,30 @@ def skew(v):
     return np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
 
 
+def fd3dVectors(R, v, w, tau_lin, tau_ang, Ic, c, m):
+    g_w = np.array([0, 0, -9.81])
+    f_res1 = tau_lin + m * R.T @ g_w + m * skew(w) @ skew(c) @ w
+    f_res2 = tau_ang + m * skew(c) @ R.T @ g_w - skew(w) @ (Ic + m * skew(c) @ skew(c).T) @ w
+
+    f_res = np.hstack([f_res1, f_res2])
+
+    Ir1 = np.hstack([m * np.identity(3), m * skew(c).T])
+    Ir2 = np.hstack([m * skew(c), Ic + m * skew(c) @ skew(c).T])
+    Isp = np.vstack([Ir1, Ir2])
+
+    a_3d = np.linalg.inv(Isp) @ f_res
+
+    return a_3d
+
+
 class multicopterData():
-    def __init__(self, file_name, prop_min_speed, prop_max_speed):
+    def __init__(self, file_name, prop_min_speed=100, prop_max_speed=1100, ros2=True):
         self.file_name = file_name
         self.time_name = 'timestamp'
 
         self.prop_min_speed = prop_min_speed
         self.prop_max_speed = prop_max_speed
+        self.ros2 = ros2
 
     def loadNumericalData(self, name_list, name_timestamp='__time'):
         # Angular acceleration
@@ -33,14 +50,35 @@ class multicopterData():
         return values, values_ts
 
     def loadPlatformState(self):
-        state_names = [
-            '/platform_state/pose/position/x', '/platform_state/pose/position/y', '/platform_state/pose/position/z',
-            '/platform_state/pose/orientation/x', '/platform_state/pose/orientation/y',
-            '/platform_state/pose/orientation/z', '/platform_state/pose/orientation/w',
-            '/platform_state/motion/linear/x', '/platform_state/motion/linear/y', '/platform_state/motion/linear/z',
-            '/platform_state/motion/angular/x', '/platform_state/motion/angular/y', '/platform_state/motion/angular/z'
-        ]
-        states, state_ts = self.loadNumericalData(state_names)
+        if self.ros2:
+            state_names = [
+                '/platform_state/pose/position/x', '/platform_state/pose/position/y',
+                '/platform_state/pose/position/z', '/platform_state/pose/orientation/x',
+                '/platform_state/pose/orientation/y', '/platform_state/pose/orientation/z',
+                '/platform_state/pose/orientation/w', '/platform_state/motion/linear/x',
+                '/platform_state/motion/linear/y', '/platform_state/motion/linear/z',
+                '/platform_state/motion/angular/x', '/platform_state/motion/angular/y',
+                '/platform_state/motion/angular/z'
+            ]
+            time_name = '__time'
+        else:
+            state_names = [
+                '/iris/odometry_sensor1/odometry/pose/pose/position/x',
+                '/iris/odometry_sensor1/odometry/pose/pose/position/y',
+                '/iris/odometry_sensor1/odometry/pose/pose/position/z',
+                '/iris/odometry_sensor1/odometry/pose/pose/orientation/x',
+                '/iris/odometry_sensor1/odometry/pose/pose/orientation/y',
+                '/iris/odometry_sensor1/odometry/pose/pose/orientation/z',
+                '/iris/odometry_sensor1/odometry/pose/pose/orientation/w',
+                '/iris/odometry_sensor1/odometry/twist/twist/linear/x',
+                '/iris/odometry_sensor1/odometry/twist/twist/linear/y',
+                '/iris/odometry_sensor1/odometry/twist/twist/linear/z',
+                '/iris/odometry_sensor1/odometry/twist/twist/angular/x',
+                '/iris/odometry_sensor1/odometry/twist/twist/angular/y',
+                '/iris/odometry_sensor1/odometry/twist/twist/angular/z'
+            ]
+            time_name = '/iris/odometry_sensor1/odometry/header/stamp'
+        states, state_ts = self.loadNumericalData(state_names, time_name)
 
         return states, state_ts
 
@@ -56,23 +94,39 @@ class multicopterData():
 
     def loadRotorAngularVelocity(self):
         # Angular acceleration
-        rotor_names = [
-            '/fmu/actuator_outputs/out/output.0',
-            '/fmu/actuator_outputs/out/output.1',
-            '/fmu/actuator_outputs/out/output.2',
-            '/fmu/actuator_outputs/out/output.3',
-        ]
+        if self.ros2:
+            rotor_names = [
+                '/fmu/actuator_outputs/out/output.0',
+                '/fmu/actuator_outputs/out/output.1',
+                '/fmu/actuator_outputs/out/output.2',
+                '/fmu/actuator_outputs/out/output.3',
+            ]
+        else:
+            rotor_names = [
+                '/iris/motor_speed/angular_velocities.0',
+                '/iris/motor_speed/angular_velocities.1',
+                '/iris/motor_speed/angular_velocities.2',
+                '/iris/motor_speed/angular_velocities.3',
+            ]
         rotor_pwms, rotor_ts = self.loadNumericalData(rotor_names)
 
-        return [fromPWMtoRadS(rotor_pwm, self.prop_min_speed, self.prop_max_speed)
-                for rotor_pwm in rotor_pwms], rotor_ts
+        if self.ros2:
+            return [fromPWMtoRadS(rotor_pwm, self.prop_min_speed, self.prop_max_speed)
+                    for rotor_pwm in rotor_pwms], rotor_ts
+        else:
+            return rotor_pwms, rotor_ts
 
     def loadAcceleration(self):
         # Accelerations
-        acc_names = [
-            '/fmu/sensor_combined/out/accelerometer_m_s2.0', '/fmu/sensor_combined/out/accelerometer_m_s2.1',
-            '/fmu/sensor_combined/out/accelerometer_m_s2.2'
-        ]
+        if self.ros2:
+            acc_names = [
+                '/fmu/sensor_combined/out/accelerometer_m_s2.0', '/fmu/sensor_combined/out/accelerometer_m_s2.1',
+                '/fmu/sensor_combined/out/accelerometer_m_s2.2'
+            ]
+        else:
+            acc_names = [
+                '/iris/imu/linear_acceleration/x', '/iris/imu/linear_acceleration/y', '/iris/imu/linear_acceleration/z'
+            ]
         acc_frds, acc_ts = self.loadNumericalData(acc_names)
 
         return [fromFRDtoFLU(acc) for acc in acc_frds], acc_ts
@@ -134,52 +188,38 @@ def fromPWMtoRadS(pwm, prop_min, prop_max):
     return ang_vel
 
 
-def computeD(acc, R, ang_vel, ang_acc):
-    wx = ang_vel[0]
-    wy = ang_vel[1]
-    wz = ang_vel[2]
+def computeD(R, w, a_lin, a_ang):
+    g_w = R.T @ np.array([0, 0, -9.81])
 
-    wx_dot = ang_acc[0]
-    wy_dot = ang_acc[1]
-    wz_dot = ang_acc[2]
+    com_1 = skew(a_ang).T + skew(w) @ skew(w).T
+    com_2 = skew(g_w).T - skew(a_lin).T
+    com = np.vstack([com_1, com_2])
 
-    R31 = R[2, 0]
-    R32 = R[2, 1]
-    R33 = R[2, 2]
+    # Inertia
+    i_1 = np.zeros([3, 6])
 
-    ax = acc[0]
-    ay = acc[1]
-    az = acc[2]
+    i_21_1 = np.diag(a_ang)
+    i_22_1 = np.array([[a_ang[1], a_ang[2], 0], [a_ang[0], 0, a_ang[2]], [0, a_ang[0], a_ang[1]]])
+    i_2_1 = np.hstack([i_21_1, i_22_1])
 
-    g = 9.81
+    i_21_2 = np.diag(w)
+    i_22_2 = np.array([[w[1], w[2], 0], [w[0], 0, w[2]], [0, w[0], w[1]]])
+    i_2_2 = np.hstack([i_21_2, i_22_2])
 
-    r1 = np.array([-wy**2 - wz**2, wx * wy - wz_dot, wx * wz + wy_dot, 0, 0, 0, 0, 0, 0])
-    r2 = np.array([wx * wy + wz_dot, -wx**2 - wz**2, -wx_dot + wy * wz, 0, 0, 0, 0, 0, 0])
-    r3 = np.array([wx * wz - wy_dot, wx_dot + wy * wz, -wx**2 - wy**2, 0, 0, 0, 0, 0, 0])
-    r4 = np.array([
-        0, az + R33 * g, -ay - R32 * g, wx_dot, -wy * wz, wy * wz, -wx * wz + wy_dot, wx * wy + wz_dot, wy**2 - wz**2
-    ])
-    r5 = np.array([
-        -az - R33 * g, 0, ax + R31 * g, wx * wz, wy_dot, -wx * wz, wx_dot + wy * wz, -wx**2 + wz**2, -wx * wy + wz_dot
-    ])
-    r6 = np.array(
-        [ay + R32 * g, -ax - R31 * g, 0, -wx * wy, wx * wy, wz_dot, wx**2 - wy**2, wx_dot - wy * wz, wx * wz + wy_dot])
+    i_2 = -i_2_1 - skew(w) @ i_2_2
 
-    return np.array([r1, r2, r3, r4, r5, r6])
+    i = np.vstack([i_1, i_2])
+
+    return np.hstack([com, i])
 
 
-def computeDm(acc, R):
-    R31 = R[2, 0]
-    R32 = R[2, 1]
-    R33 = R[2, 2]
+def computeDm(R, a_lin):
+    g_w = R.T @ np.array([0, 0, -9.81])
 
-    ax = acc[0]
-    ay = acc[1]
-    az = acc[2]
+    m_1 = g_w - a_lin
 
-    g = 9.81
+    return np.vstack([np.array([m_1]).T, np.zeros([3, 1])])
 
-    return np.array([ax + R31 * g, ay + R32 * g, az + R33 * g, 0, 0, 0])
 
 
 def computeDDm(R, vel, acc):
@@ -187,7 +227,6 @@ def computeDDm(R, vel, acc):
 
     Dm = np.zeros(6)
     Dm[:3] = regressor[:3, 0] - R.T @ np.array([0, 0, -9.81])
-    # Dm[:3] = regressor[:3, 0]
     Dm[3:] = regressor[3:, 0]
 
     D = np.vstack([
